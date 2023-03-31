@@ -36,9 +36,7 @@ std::vector<Printer> PrintManager::listPrinters()
         return printers;
     }
 
-    auto result = EnumPrintersW(flags, nullptr, 2, (LPBYTE)buffer, needed, &needed,
-                                &returned);
-
+    auto result = EnumPrintersW(flags, nullptr, 2, (LPBYTE)buffer, needed, &needed, &returned);
     if (!result)
     {
         free(buffer);
@@ -47,11 +45,40 @@ std::vector<Printer> PrintManager::listPrinters()
 
     for (DWORD i = 0; i < returned; i++)
     {
+         // Get the printer status
+                            HANDLE hPrinter = NULL;
+                            bool work_attributes = false;
+                            if (OpenPrinterW(buffer[i].pPrinterName, &hPrinter, NULL))
+                            {
+                                DWORD dwBytesNeeded = 0;
+                                GetPrinterW(hPrinter, 2, NULL, 0, &dwBytesNeeded);
+                                PRINTER_INFO_2* pPrinterInfo2 = (PRINTER_INFO_2*)malloc(dwBytesNeeded);
+                                if (pPrinterInfo2 != NULL)
+                                {
+                                    if (GetPrinterW(hPrinter, 2, (LPBYTE)pPrinterInfo2, dwBytesNeeded, &dwBytesNeeded))
+                                    {
+                                       work_attributes = (pPrinterInfo2->Attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE) == 0;
+                                        // Check if the printer is offline
+                                        //if (pPrinterInfo2->Attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE)
+                                        //{
+                                        //    printf("Printer %ls is offline.\n", buffer[i].pPrinterName);
+                                        //}
+                                        //else
+                                        //{
+                                        //    printf("Printer %ls is online.\n", buffer[i].pPrinterName);
+                                        //}
+                                    }
+                                    free(pPrinterInfo2);
+                                }
+                                ClosePrinter(hPrinter);
+                            }
+
+
         printers.push_back(Printer{
             toUtf8(buffer[i].pPrinterName),
             toUtf8(buffer[i].pDriverName),
             size > 0 && _tcsncmp(buffer[i].pPrinterName, defaultPrinter, size) == 0, // if this is the defaultprinter
-            (buffer[i].Status &
+            work_attributes && (buffer[i].Status &
              (PRINTER_STATUS_NOT_AVAILABLE | PRINTER_STATUS_ERROR |
               PRINTER_STATUS_OFFLINE | PRINTER_STATUS_PAUSED)) == 0});
     }
@@ -59,6 +86,56 @@ std::vector<Printer> PrintManager::listPrinters()
     free(buffer);
     free(defaultPrinter);
     return printers;
+}
+
+void CheckPrinterStatus()
+{
+    DWORD dwNeeded, dwReturned;
+    PRINTER_INFO_2* pPrinterInfo = NULL;
+
+    // Call EnumPrinters to get the list of installed printers
+    if (EnumPrintersW(PRINTER_ENUM_LOCAL, NULL, 2, NULL, 0, &dwNeeded, &dwReturned))
+    {
+        // Allocate memory for the printer info
+        pPrinterInfo = (PRINTER_INFO_2*)malloc(dwNeeded);
+        if (pPrinterInfo != NULL)
+        {
+            // Call EnumPrinters again to get the printer info
+            if (EnumPrintersW(PRINTER_ENUM_LOCAL, NULL, 2, (LPBYTE)pPrinterInfo, dwNeeded, &dwNeeded, &dwReturned))
+            {
+                // Loop through the list of printers and check their status
+                for (DWORD i = 0; i < dwReturned; i++)
+                {
+                    // Get the printer status
+                    HANDLE hPrinter = NULL;
+                    if (OpenPrinterW(pPrinterInfo[i].pPrinterName, &hPrinter, NULL))
+                    {
+                        DWORD dwBytesNeeded = 0;
+                        GetPrinterW(hPrinter, 2, NULL, 0, &dwBytesNeeded);
+                        PRINTER_INFO_2* pPrinterInfo2 = (PRINTER_INFO_2*)malloc(dwBytesNeeded);
+                        if (pPrinterInfo2 != NULL)
+                        {
+                            if (GetPrinterW(hPrinter, 2, (LPBYTE)pPrinterInfo2, dwBytesNeeded, &dwBytesNeeded))
+                            {
+                                // Check if the printer is offline
+                                if (pPrinterInfo2->Attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE)
+                                {
+                                    printf("Printer %ls is offline.\n", pPrinterInfo[i].pPrinterName);
+                                }
+                                else
+                                {
+                                    printf("Printer %ls is online.\n", pPrinterInfo[i].pPrinterName);
+                                }
+                            }
+                            free(pPrinterInfo2);
+                        }
+                        ClosePrinter(hPrinter);
+                    }
+                }
+            }
+            free(pPrinterInfo);
+        }
+    }
 }
 
 BOOL PrintManager::pickPrinter(std::string printerName)

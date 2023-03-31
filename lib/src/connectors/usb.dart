@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,6 +10,7 @@ class UsbPrinterInput extends BasePrinterInput {
   final String? name;
   final String? vendorId;
   final String? productId;
+
   UsbPrinterInput({
     this.name,
     this.vendorId,
@@ -24,7 +26,9 @@ class UsbPrinterInfo {
   String name;
   String? model;
   bool isDefault = false;
+  bool isAvailable = false;
   String deviceId;
+
   UsbPrinterInfo.Android({
     required this.vendorId,
     required this.productId,
@@ -33,16 +37,25 @@ class UsbPrinterInfo {
     required this.name,
     required this.deviceId,
   });
+
   UsbPrinterInfo.Windows({
     required this.name,
     required this.model,
     required this.isDefault,
+    required this.isAvailable,
     this.vendorId = '',
     this.productId = '',
     this.manufacturer = '',
     this.product = '',
     this.deviceId = '',
   });
+
+  @override
+  String toString() {
+    return 'name:$name, model:$model, isDefault:$isDefault, isAvailable:$isAvailable, '
+        'vendorId:$vendorId, productId:$productId, manufacturer:$manufacturer '
+        'product:$product, deviceId:$deviceId';
+  }
 }
 
 class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
@@ -65,9 +78,12 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
   static UsbPrinterConnector get instance => _instance;
 
   Stream<USBStatus> get _statusStream => _statusStreamController.stream;
-  final StreamController<USBStatus> _statusStreamController = StreamController.broadcast();
+  final StreamController<USBStatus> _statusStreamController =
+      StreamController.broadcast();
 
-  UsbPrinterConnector.Android({required this.vendorId, required this.productId}) : name = '';
+  UsbPrinterConnector.Android({required this.vendorId, required this.productId})
+      : name = '';
+
   UsbPrinterConnector.Windows({required this.name})
       : vendorId = '',
         productId = '';
@@ -76,10 +92,13 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
   String productId;
   String name;
   USBStatus _status = USBStatus.none;
+
   USBStatus get status => _status;
 
   setVendor(String vendorId) => this.vendorId = vendorId;
+
   setProduct(String productId) => this.productId = productId;
+
   setName(String name) => this.name = name;
 
   /// Gets the current state of the Bluetooth module
@@ -91,7 +110,8 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
 
   static DiscoverResult<UsbPrinterInfo> discoverPrinters() async {
     if (Platform.isAndroid) {
-      final List<dynamic> results = await flutterPrinterChannel.invokeMethod('getList');
+      final List<dynamic> results =
+          await flutterPrinterChannel.invokeMethod('getList');
       return results
           .map((dynamic r) => PrinterDiscovered<UsbPrinterInfo>(
                 name: r['product'],
@@ -102,16 +122,22 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
                   product: r['product'],
                   name: r['name'],
                   deviceId: r['deviceId'],
-                ),
+                )..isAvailable = true,
               ))
           .toList();
     }
     if (Platform.isWindows) {
-      final List<dynamic> results = await flutterPrinterChannel.invokeMethod('getList');
+      final List<dynamic> results =
+          await flutterPrinterChannel.invokeMethod('getList');
       return results
           .map((dynamic result) => PrinterDiscovered<UsbPrinterInfo>(
                 name: result['name'],
-                detail: UsbPrinterInfo.Windows(isDefault: result['default'], name: result['name'], model: result['model']),
+                detail: UsbPrinterInfo.Windows(
+                  isDefault: result['default'],
+                  name: result['name'],
+                  model: result['model'],
+                  isAvailable: result['available'],
+                ),
               ))
           .toList();
     }
@@ -120,7 +146,8 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
 
   Stream<PrinterDevice> discovery() async* {
     if (Platform.isAndroid) {
-      final List<dynamic> results = await flutterPrinterChannel.invokeMethod('getList');
+      final List<dynamic> results =
+          await flutterPrinterChannel.invokeMethod('getList');
       for (final device in results) {
         var r = await device;
         yield PrinterDevice(
@@ -131,7 +158,8 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
         );
       }
     } else if (Platform.isWindows) {
-      final List<dynamic> results = await flutterPrinterChannel.invokeMethod('getList');
+      final List<dynamic> results =
+          await flutterPrinterChannel.invokeMethod('getList');
       for (final device in results) {
         var r = await device;
         yield PrinterDevice(
@@ -144,17 +172,27 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
 
   Future<bool> _connect({UsbPrinterInput? model}) async {
     if (Platform.isAndroid) {
-      Map<String, dynamic> params = {"vendor": int.parse(model?.vendorId ?? vendorId), "product": int.parse(model?.productId ?? productId)};
+      Map<String, dynamic> params = {
+        "vendor": int.parse(model?.vendorId ?? vendorId),
+        "product": int.parse(model?.productId ?? productId)
+      };
       return await flutterPrinterChannel.invokeMethod('connectPrinter', params);
     } else if (Platform.isWindows) {
       Map<String, dynamic> params = {"name": model?.name ?? name};
-      return await flutterPrinterChannel.invokeMethod('connectPrinter', params) == 1 ? true : false;
+      return await flutterPrinterChannel.invokeMethod(
+                  'connectPrinter', params) ==
+              1
+          ? true
+          : false;
     }
     return false;
   }
 
   Future<bool> _close() async {
-    if (Platform.isWindows) return await flutterPrinterChannel.invokeMethod('close') == 1 ? true : false;
+    if (Platform.isWindows)
+      return await flutterPrinterChannel.invokeMethod('close') == 1
+          ? true
+          : false;
     return false;
   }
 
@@ -190,7 +228,10 @@ class UsbPrinterConnector implements PrinterConnector<UsbPrinterInput> {
     else if (Platform.isWindows)
       try {
         Map<String, dynamic> params = {"bytes": Uint8List.fromList(bytes)};
-        return await flutterPrinterChannel.invokeMethod('printBytes', params) == 1 ? true : false;
+        return await flutterPrinterChannel.invokeMethod('printBytes', params) ==
+                1
+            ? true
+            : false;
       } catch (e) {
         await this._close();
         return false;
