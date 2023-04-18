@@ -1,5 +1,15 @@
 # flutter_pos_printer_platform
 
+## 🐾CHANGED IN THIS FORK🐾
+
+![Pub Version](https://img.shields.io/badge/tag-v1.1.0+1-blue)
+1. upgrade [image](https://pub.dev/packages/image) to `^4.0.15` from `^3.2.2`
+2. add `isAvailable` for `UsbPrinterInfo.Windows` and `UsbPrinterInfo`, and check printer status is offline in `windows`
+3. Example app use lib [esc_pos_utils](https://pub.dev/packages/esc_pos_utils) changed to my fork [esc_pos_utils](https://github.com/KNightING/esc_pos_utils) from `^1.1.0`
+
+ORIGIN
+---
+
 [![Pub Version](https://img.shields.io/badge/pub-v1.1.0-green)](https://pub.dev/packages/flutter_pos_printer_platform)
 
 A library to discover printers, and send printer commands.
@@ -7,7 +17,6 @@ A library to discover printers, and send printer commands.
 This library allows to print esc commands to printers in different platforms such as android, ios, windows and different interfaces as Bluetooth and BLE, USB and Wifi/Ethernet
 
 Inspired by [flutter_pos_printer](https://github.com/feedmepos/flutter_printer/tree/master/packages/flutter_pos_printer).
-
 
 ## Main Features
 * Android, iOS and Windows support
